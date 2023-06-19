@@ -8,7 +8,6 @@
 #include <string.h>
 #include <arpa/inet.h>
 
-#include <Config.hpp>
 #include <NAmpKeeper.hpp>
 
 using namespace std;
@@ -141,7 +140,7 @@ NAmpKeeper::Update(int qflag, uint64_t *h, uint64_t F) {
                     r = ((double)(rand() % 10000)) / 10000;
                     p = ((double)1) / pow(Decay_Probability, get_expo(b->QC));
                     
-                    if (r <= p) {
+                    if (r <= p) {    
                         decrease(&b->QC);
                         decrease(&b->RC);
 

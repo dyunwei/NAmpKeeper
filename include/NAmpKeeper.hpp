@@ -1,8 +1,6 @@
 #ifndef    _NAMPKEEPER_HPP_
 #define    _NAMPKEEPER_HPP_
 
-#include <Config.hpp>
-
 #define C_COEFF       5
 #define C_EXPO        3
 
@@ -11,7 +9,6 @@
 
 #define C_Nomal_MAX_VALUE     0x80
 #define C_EXPO_MAX_VALUE      0xFF
-#define C_EXPO_DECAY_VALUE    0xFC
 
 // = 1/8
 #define C_EXPO_CURRENT_EXPOVal(C) (C_EXPO + (C & C_EXPO_PART_MASK))

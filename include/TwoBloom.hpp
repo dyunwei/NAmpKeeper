@@ -1,8 +1,9 @@
 #ifndef    _TWOBLOOM_HPP_
 #define    _TWOBLOOM_HPP_
 
-#include <Config.hpp>
 #include <TrafficSource.hpp>
+
+
 class Bloom {
     private:
         uint8_t **bitmaps;

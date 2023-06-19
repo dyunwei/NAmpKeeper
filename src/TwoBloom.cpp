@@ -8,9 +8,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 
-#include <Config.hpp>
 #include <TwoBloom.hpp>
-
 #include <bitmap.h>
 
 TwoBloom::TwoBloom(size_t m, uint8_t k, uint8_t interval) {

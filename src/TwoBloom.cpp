@@ -17,18 +17,18 @@ TwoBloom::TwoBloom(size_t m, uint8_t k, uint8_t interval) {
     this->blooms[1] = new Bloom(m / 2, k);
     this->interval  = interval;
     this->bindex      = 0;
-    this->current_sec = 0;
+    this->active_index = 0;
 }
 
 void 
 TwoBloom::Set(const Packet *p) {
     uint64_t key[2];
     Bloom   *bloom;
+
+    this->bindex = p->sec % (2 * this->interval) < this->interval ? 0 : 1;
     
-    if (p->sec % interval == 0 
-                && current_sec != p->sec) {
-        current_sec = p->sec;
-        bindex++;
+    if (this->bindex != this->active_index) {
+        this->active_index = this->bindex;
         bloom = blooms[bindex % (sizeof(blooms) / sizeof(blooms[0]))];
         bloom->Clear();
     }
@@ -47,15 +47,14 @@ TwoBloom::Set(const Packet *p) {
 int 
 TwoBloom::Check(const Packet *p) {
     uint64_t key[2];
-    Bloom   *bloom;
+    //Bloom   *bloom;
 
-    if (p->sec % interval == 0 
-                && current_sec != p->sec) {
-        current_sec = p->sec;
-        bindex++;
-        bloom = blooms[bindex % (sizeof(blooms) / sizeof(blooms[0]))];
-        bloom->Clear();
+    if (this->cflag) {
+        assert(p->timestamp < Interval);
+        return 1;
     }
+
+    assert(p->timestamp >= Interval);
 
     // a response
     key[0] = p->dip;

@@ -9,6 +9,7 @@
 
 #include <DAmpADF.hpp>
 #include <TrafficSource.hpp>
+#include <Mitigator.hpp>
 
 using namespace std;
 
@@ -20,17 +21,6 @@ int TrafficSource::Load_Traffic(const std::string& background_file,
     ifstream bfile(background_file);
     ifstream afile(attack_file);
 
-    if (afile.is_open()) {
-        while (std::getline(afile, line)) {
-            
-            Packet_t *p = new Packet_t();            
-            this->Parse_Attack(line, p);
-        }
-    }
-    else {
-        return false;
-    }
-    
     if (bfile.is_open()) {
         while (getline(bfile, line)) {
         
@@ -39,6 +29,19 @@ int TrafficSource::Load_Traffic(const std::string& background_file,
         }
     }
     else {
+        cout << "Cann't find the background file: " << background_file << endl;
+        return false;
+    }
+
+    if (afile.is_open()) {
+        while (std::getline(afile, line)) {
+            
+            Packet_t *p = new Packet_t();            
+            this->Parse_Attack(line, p);
+        }
+    }
+    else {
+        cout << "Cann't find the attack file: " << attack_file << endl;
         return false;
     }
 
@@ -51,21 +54,21 @@ void TrafficSource::Parse_Attack(const string& line, Packet_t* p) {
     istringstream s(line);
 
     getline(s, word, ',');
-    p->timestamp = stod(word) + 60;    
+    p->timestamp = stod(word) + Attack_Start_Time;    
     p->sec = int(p->timestamp);
 
     p->protocol = P_DNS;
     p->isA2V = 1;
     
     getline(s, word, ',');
-    p->sip = inet_addr(word.c_str());
+    p->sip = inet_network(word.c_str());
     
     getline(s, word, ',');
     //p->sport = stoul(word);
     p->sport = 53;
     
     getline(s, word, ',');
-    p->dip = inet_addr(word.c_str());
+    p->dip = inet_network(word.c_str());
     
     getline(s, word, ',');
     p->dport = stoul(word);
@@ -196,13 +199,13 @@ void TrafficWIDE::Parse_Background(const string& line, Packet_t* p)
     p->isA2V = stoul(word);
     
     getline(s, word, ',');
-    p->sip = inet_addr(word.c_str());
+    p->sip = inet_network(word.c_str());
     
     getline(s, word, ',');
     p->sport = stoul(word);
     
     getline(s, word, ',');
-    p->dip = inet_addr(word.c_str());
+    p->dip = inet_network(word.c_str());
     
     getline(s, word, ',');
     p->dport = stoul(word);
@@ -229,13 +232,17 @@ TrafficZipf::TrafficZipf(const string& background_file,
 
 void TrafficZipf::Parse_Background(const string& line, Packet_t* p)
 {
+    long int ip;
+
     p->timestamp = this->period * this->count++;
     p->sec       = int(p->timestamp);
     p->protocol  = P_DNS;
     p->isA2V     = 0;
     p->sip       = 0;
     p->sport     = rand() % 0xFFFF;
-    p->dip       = inet_addr(line.c_str());
+    ip           = stol(line.c_str());
+    assert(ip <= 0xFFFFFFFF);
+    p->dip       = ip;
     p->dport     = 53; 
     p->id        = rand() % 0xFFFF;
     p->isAttack  = 0;

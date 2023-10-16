@@ -26,16 +26,28 @@ class TwoBloom {
         Bloom      *blooms[2];
         // bloom index recently used
         uint8_t    bindex;
+
+        uint8_t    active_index;
         // Each bloom holds interval (2s) dns queries.
         uint8_t    interval;
         // current second
         uint64_t   current_sec;
+
+        int        cflag;
 
     public:
         TwoBloom(size_t m, uint8_t k, uint8_t interval);
         
         void Set(const Packet *p);
         int  Check(const Packet *p);
+
+        void coldStartBegin(void) {
+            this->cflag = 1;
+         };
+
+        void coldStartEnd(void) {
+            this->cflag = 0;
+        };
 };
 
 #endif

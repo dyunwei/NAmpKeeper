@@ -10,13 +10,16 @@
 
 using namespace std;
 
+#define Interval 2
+
 uint64_t MurmurHash64A ( const void * key, int len, unsigned int seed);
 
-static inline double get_timestamp()
+static inline long long int get_timestamp()
 {
     struct timespec tv;
     clock_gettime(CLOCK_MONOTONIC, &tv);
-    return (tv.tv_sec + (((double)tv.tv_nsec/1000) / 1000000));
+    long long milliseconds = (tv.tv_sec*1000) + (tv.tv_nsec/1000000);
+    return milliseconds;
 }
 
 class Logger {

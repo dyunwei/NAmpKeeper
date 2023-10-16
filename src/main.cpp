@@ -11,13 +11,16 @@
 #include <DAmpADF.hpp>
 #include <TrafficSource.hpp>
 #include <Mitigator.hpp>
+#include <NAmpKeeper.hpp>
 
 using namespace std;
+
+Packet_t *CP;
 
 /*
     log file.
 */
-Logger dlog("stats/log.txt");
+Logger dlog("stats/temp/log.txt");
 
 void usage()
 {
@@ -53,8 +56,6 @@ int main(int argc, char *argv[])
     ofstream     f;
     stringstream oss;
 
-    Packet_t *p;
-
     int      isWIDE, i, mk, mb;
     uint32_t amplifierip = 0;
 
@@ -70,7 +71,7 @@ int main(int argc, char *argv[])
         isWIDE = stoi(argv[2]);
         mk     = stoi(argv[4]) * 1024;
         mb     = stoi(argv[5]) * 1024;
-        amplifierip = inet_addr(argv[6]);        
+        amplifierip = inet_network(argv[6]);        
         tag    = argv[7];
     }
     else if (argc == 2 && (string(argv[1]) == "-h")) {
@@ -90,7 +91,11 @@ int main(int argc, char *argv[])
     */
 
     dlog.SS << "BF+: initialize with [mk=" << mk / 1024                  \
-            << "KB,mb=" << mb/1024 << "KB], label: " << tag << ", amplifierip:" << amplifierip;
+            << "KB,mb=" << mb/1024 << "KB], label: " << tag              \
+            << ",Decay_Probability=" << Decay_Probability                \
+            << ",Pop_Server_Threshold PhiQ=" << Pop_Server_Threshold     \
+            << ",Amplifier_Threshold PhiR=" << Amplifier_Threshold       \
+            << ", amplifierip:" << amplifierip << "," << argv[6];
     dlog.Flush();
 
     Mitigator  mitigator(mk, mb);
@@ -100,7 +105,11 @@ int main(int argc, char *argv[])
     */
 
     dlog.SS << "BF : initialize with [mk=" << mk / 1024                  \
-            << "KB,mb=" << mb/1024 << "KB], label: " << tag << ", amplifierip:" << amplifierip;
+            << "KB,mb=" << mb/1024 << "KB], label: " << tag              \
+            << ",Decay_Probability=" << Decay_Probability                \
+            << ",Pop_Server_Threshold PhiQ=" << Pop_Server_Threshold     \
+            << ",Amplifier_Threshold PhiR=" << Amplifier_Threshold       \
+            << ", amplifierip:" << amplifierip << "," << argv[6];
 
     dlog.Flush();
     
@@ -119,8 +128,10 @@ int main(int argc, char *argv[])
     else {
         size_t found = background_traffic_file.find_last_of("-");
 
-        /* Get PPS from the background traffic file name. */
-        float    pps = std::stof(background_traffic_file.substr(found+1));
+        /* 
+            Get PPS from the background traffic file name. 
+        */
+        double    pps = std::stof(background_traffic_file.substr(found+1));
         double period = ((double)1) / (pps * 1000000);
 
         /*
@@ -141,18 +152,18 @@ int main(int argc, char *argv[])
         while (1) {
 
             /* Get next packet to process. */
-            p = source->GetNext();
-            if (!p) {
+            CP= source->GetNext();
+            if (!CP) {
                 break;
             }
 
             /*  Replace the amplifier IP if needed */
-            if (amplifierip && p->isAttack && p->isA2V) {
-                p->sip = amplifierip;
+            if (amplifierip && CP->isAttack && CP->isA2V) {
+                CP->sip = amplifierip;
             }
 
             /* Process the packet  */
-            mitigator.Process(p);
+            mitigator.Process(CP);
         }
     };
 
@@ -175,7 +186,7 @@ int main(int argc, char *argv[])
     /* csv header */
     f << "ID," << "TotalQrs," << "TotalRes," << "TotalOthers," << "IdtQrs,"       \
       << "TotalAttackRes," << "PassAttackResFromBL,"                              \
-      << "PassAttackResFromKeeper" << endl;
+      << "PassAttackResFromKeeper" << ",DrppedNormalResponse" << endl;
     
     for (i = 0; i < NSec; ++i) {
         f << i << "," << mitigator.stats.n_total_queries[i]                            \
@@ -185,53 +196,24 @@ int main(int argc, char *argv[])
                << "," << mitigator.stats.n_total_attack_responses[i]                   \
                << "," << mitigator.stats.n_passed_attack_responses_from_bl[i]          \
                << "," << mitigator.stats.n_passed_attack_responses_from_keeper[i]      \
+               << "," << mitigator.stats.n_dropped_normal_responses[i]                 \
                << endl;
     }
     
     f.close();    
     oss.str("");
 
-    /* Output amplifiers to the amplifier file. */
-    if (mitigator.amplifiers.size() > 0) {
-
-#ifndef BF
-        oss << workingdir << amplifier_file         \
-            << "-" << tag << "-" << mk / 1024      \
-            << "-" << mb / 1024 << "-ATT"           \
-            << (amplifierip ? 2 : 1) <<".csv" ; 
-#else
-        oss << workingdir << amplifier_file         \
-            << "-" << tag << "-" << mk / 1024      \
-            << "-" << mb / 1024 << "-ATT"           \
-            << (amplifierip ? 2 : 1) << "-BF.csv" ;
-#endif
-
-        f.open(oss.str());
-        
-        /* csv header */
-        f << "Time," << "IP," << "IPINT," << "Fingerprint" << endl;
-        for (auto ctuple : mitigator.amplifiers) {
-            struct in_addr addr;
-            addr.s_addr = get<1>(ctuple);
-            
-            f << fixed << std::setprecision(6) << get<0>(ctuple) << ","     \
-                << inet_ntoa(addr) << "," << addr.s_addr << ","             \
-                << get<2>(ctuple) << endl;
-        }
-        
-        f.close();
-        oss.str("");
-    }
-
     {
         int total_idenq = 0;
         int total_passb = 0;
         int total_passk = 0;
+        int total_dropr = 0;
         
         for (i = 60; i < 120; ++i) {            
             total_passb += mitigator.stats.n_passed_attack_responses_from_bl[i];
             total_passk += mitigator.stats.n_passed_attack_responses_from_keeper[i];
             total_idenq += mitigator.stats.n_identified_queries[i];
+            total_dropr += mitigator.stats.n_dropped_normal_responses[i];
         }
 
         for (i = 0; i < NSec; ++i) {
@@ -245,15 +227,31 @@ int main(int argc, char *argv[])
         
         dlog.SS << "[response] total: " << stats_total_res    \
                 << ",      passb: " << total_passb      \
-                << ",      passk: " << total_passk;
+                << ",      passk: " << total_passk      \
+                << ",      dropr: " << total_dropr;
         dlog.Flush();
     }
 
-    dlog.SS << "[perf] NAmpkeepr: " << mitigator.stats.total_time_of_keeper << "s"  \
-            << ", TwoBloomFilter: " << mitigator.stats.total_time_of_bl << "s"
-            << ", PPS: " << (stats_total_qrs + stats_total_res) / 
+    dlog.SS << "[perf] NAmpkeepr: " << mitigator.stats.total_time_of_keeper << "ms"  \
+            << ", TwoBloomFilter: " << mitigator.stats.total_time_of_bl << "ms"
+            << ", PPS: " << ((double)(stats_total_qrs + stats_total_res)) / 
                 (mitigator.stats.total_time_of_keeper + mitigator.stats.total_time_of_bl);
     dlog.Flush();
+
+
+#ifndef BF
+            oss << workingdir << amplifier_file         \
+                << "-" << tag << "-" << mk / 1024      \
+                << "-" << mb / 1024 << "-ATT"           \
+                << (amplifierip ? 2 : 1) <<".csv" ; 
+#else
+            oss << workingdir << amplifier_file         \
+                << "-" << tag << "-" << mk / 1024      \
+                << "-" << mb / 1024 << "-ATT"           \
+                << (amplifierip ? 2 : 1) << "-BF.csv" ;
+#endif
+
+    mitigator.DumpDebugData(oss.str());
 
     return 0;
 }

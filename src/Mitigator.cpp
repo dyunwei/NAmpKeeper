@@ -16,23 +16,30 @@
 using namespace std;
 
 Mitigator::Mitigator(size_t mk, size_t mb)
-    : stats{0} 
 {
     bloom  = new TwoBloom(mb, K, Interval);
+    cflag  = 0;
+
+    memset(&this->stats, 0, sizeof(Stats_t));
 
     if (mk) {
-        keeper = new NAmpKeeper(mk, R);
+        this->keeper = new NAmpKeeper(mk, R);
     }
     else {
-        keeper = NULL;
+        this->keeper = NULL;
     }
+
+    this->bloom->coldStartBegin();
 }
 
 Packet_t* Mitigator::Process(Packet_t* p) {
     // https://github.com/jvirkki/libbloom/blob/master/bloom.c
 
-    double   t1, t2;
+    long long int   t1, t2;
     int      res, qflag;
+
+    static double  ts;
+    
 
 #ifndef  BF
     const void  *buffer;    
@@ -40,6 +47,9 @@ Packet_t* Mitigator::Process(Packet_t* p) {
     FingerPrint_t F;
     int      i, res2;
 #endif
+
+    assert(p->timestamp >= ts);
+    ts = p->timestamp;
 
     if (!Is_Valid_DNSPacket(p)) {
         // Pass
@@ -66,6 +76,11 @@ Packet_t* Mitigator::Process(Packet_t* p) {
         return p;
     }
 
+    if (p->timestamp > Interval) {
+        // cold start end
+        this->bloom->coldStartEnd();
+    }
+
 /*
 BF == bloom filters without NAmpKeeper.
 
@@ -73,6 +88,8 @@ make CXXFLAGS=-D=BF
 */
 #ifndef BF
 
+    t1 = get_timestamp();
+    
     if (qflag) {
         buffer = &p->dip;
     }
@@ -80,30 +97,20 @@ make CXXFLAGS=-D=BF
         buffer = &p->sip;
     }
     
-    t1 = get_timestamp();
-    
     a = MurmurHash64A(buffer, sizeof(uint32_t), 0x9747b28c);
     b = MurmurHash64A(buffer, sizeof(uint32_t), a);
-    F = a >> 48;
+    F = a > 0xFFFFFFFFFFFF ? a >> 48 : a;
+    assert(0 != F);
     
     for (i = 0; i < R; ++i) {
         h[i] = a + b * i;
     }
 
-    res  = keeper->Update(qflag, h, F);
-    res2 = keeper->Pass(h, F);
+    keeper->Update(qflag, h, F, p->sec);
+    res2 = keeper->Check(h, F);
     
     t2 = get_timestamp();
     this->stats.total_time_of_keeper += (t2 - t1);
-    
-    if (res) {
-        if (qflag) {
-            amplifiers.push_back(tuple<double, uint32_t, uint16_t>(p->timestamp, p->dip, F));
-        }
-        else {
-            amplifiers.push_back(tuple<double, uint32_t, uint16_t>(p->timestamp, p->sip, F));
-        }
-    }
 
     if (res2) {
         if (qflag) {
@@ -112,6 +119,7 @@ make CXXFLAGS=-D=BF
         else {
             if (p->isAttack) {
                 this->stats.n_passed_attack_responses_from_keeper[p->sec]++;
+                //cout << p->timestamp << "," << p->sip << "," << F << endl;
             }
         }
     
@@ -148,9 +156,17 @@ make CXXFLAGS=-D=BF
         }
         else {
             // Drop
+            if (!p->isAttack)
+                this->stats.n_dropped_normal_responses[p->sec]++;
             return NULL;
         }
     }
 
+}
+
+void
+Mitigator::DumpDebugData(string const &path) {
+    if (this->keeper)
+        this->keeper->DumpServers(path);
 }
 

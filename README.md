@@ -5,7 +5,7 @@ NAmpKeeper is a novel structure designed to store valid non-amplifiers. DNS quer
 We use Two-Bloom filter, denoted as an array BF[2], to mitigate unsolicited DNS responses. Two-Bloom filter comprises of two Bloom filters, BF[0] and BF[1], which alternate in storing DNS queries within a predefined time interval $\delta$ (e.g., $\delta=2$ seconds).
 
 # Datasets
-We provide samle datasets [here](https://drive.google.com/drive/folders/184Ln8ps5dK93xV_In23Z1FkJM8NjFV1b?usp=sharing). You can download and put the whole folder in the working directory for testing.
+We provide sample datasets [here](https://drive.google.com/drive/folders/184Ln8ps5dK93xV_In23Z1FkJM8NjFV1b?usp=sharing). You can download and put the whole folder in the working directory for testing.
 
 # Compile
 * Compile to get the excutable file for BF+
